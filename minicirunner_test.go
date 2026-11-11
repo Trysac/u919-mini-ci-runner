@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -207,6 +208,9 @@ jobs:
 		fakeDocker += ".bat"
 		if err := os.WriteFile(fakeDocker, []byte("@exit /b 1\r\n"), 0o755); err != nil {
 			t.Fatal(err)
+		}
+		if abs, err := exec.LookPath(fakeDocker); err == nil {
+			fakeDocker = abs
 		}
 	} else {
 		if err := os.WriteFile(fakeDocker, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
@@ -667,6 +671,9 @@ if defined last (
 `
 		if err := os.WriteFile(fakeDocker, []byte(script), 0o755); err != nil {
 			t.Fatal(err)
+		}
+		if abs, err := exec.LookPath(fakeDocker); err == nil {
+			fakeDocker = abs
 		}
 	} else {
 		script := `#!/bin/sh

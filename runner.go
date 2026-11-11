@@ -489,18 +489,29 @@ func sanitizeArtifactJobID(id string) string {
 	return b.String()
 }
 
-func removeAllWithPermFix(path string) error {
-	err := os.RemoveAll(path)
+func removeAllWithPermFix(dirPath string) error {
+	err := os.RemoveAll(dirPath)
 	if err == nil || os.IsNotExist(err) {
 		return nil
 	}
-	_ = filepath.WalkDir(path, func(p string, d fs.DirEntry, walkErr error) error {
-		if walkErr == nil {
-			_ = os.Chmod(p, 0o777)
+	chmodRecursive(dirPath)
+	return os.RemoveAll(dirPath)
+}
+
+func chmodRecursive(dirPath string) {
+	_ = os.Chmod(dirPath, 0o777)
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		childPath := filepath.Join(dirPath, entry.Name())
+		if entry.IsDir() {
+			chmodRecursive(childPath)
+		} else {
+			_ = os.Chmod(childPath, 0o777)
 		}
-		return nil
-	})
-	return os.RemoveAll(path)
+	}
 }
 
 // computeHashFiles walks sourceDir, matches files against pattern using path.Match
