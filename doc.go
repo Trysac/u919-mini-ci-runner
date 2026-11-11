@@ -1,5 +1,7 @@
-// Package minicirunner is a small, dependency-free Go library: Run CI pipelines from a YAML file in containers with job dependencies, matrix expansion, content-keyed caches, artifacts and live logs
+// Package minicirunner parses and executes containerised CI pipelines defined in a compact YAML format.
 //
-// The public API is every exported identifier of this root package. Functions are pure: they do
-// no I/O, keep no global mutable state and report invalid input through returned errors.
+// It supports job dependency DAGs, deterministic matrix expansion, content-keyed
+// immutable caches with hashFiles expressions, artifact extraction, per-job log
+// streaming with truncation limits, and pluggable container runtimes (including
+// Docker and an in-memory FakeRuntime for testing pipelines without containers).
 package minicirunner
