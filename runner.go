@@ -305,7 +305,7 @@ func (e *engine) runJob(j *Job) (*JobResult, error) {
 	e.emitEvent(Event{Kind: EventJobStarted, Job: j.ID})
 
 	jobWorkDir := filepath.Join(e.opts.WorkDir, sanitizeID(j.ID))
-	if err := os.RemoveAll(jobWorkDir); err != nil {
+	if err := removeAllWithPermFix(jobWorkDir); err != nil {
 		return nil, newErrorf(ErrCodeRuntime, "failed to clean job workdir: %v", err)
 	}
 	if err := copyDirectoryWithLimit(e.opts.SourceDir, jobWorkDir, MaxWorkspaceBytes); err != nil {
@@ -487,6 +487,20 @@ func sanitizeArtifactJobID(id string) string {
 		}
 	}
 	return b.String()
+}
+
+func removeAllWithPermFix(path string) error {
+	err := os.RemoveAll(path)
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	_ = filepath.WalkDir(path, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr == nil {
+			_ = os.Chmod(p, 0o777)
+		}
+		return nil
+	})
+	return os.RemoveAll(path)
 }
 
 // computeHashFiles walks sourceDir, matches files against pattern using path.Match

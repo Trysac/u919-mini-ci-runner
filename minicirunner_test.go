@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -202,8 +203,15 @@ jobs:
 	}
 	// Create a fake docker script that exits 1.
 	fakeDocker := filepath.Join(tmpDir, "fake-docker")
-	if err := os.WriteFile(fakeDocker, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
-		t.Fatal(err)
+	if runtime.GOOS == "windows" {
+		fakeDocker += ".bat"
+		if err := os.WriteFile(fakeDocker, []byte("@exit /b 1\r\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		if err := os.WriteFile(fakeDocker, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var stdout, stderr bytes.Buffer
 	exitCode := minicirunner.RunCLI([]string{"run", pipelineFile, "-source", tmpDir, "-out", filepath.Join(tmpDir, ".ci"), "-docker", fakeDocker}, &stdout, &stderr)
@@ -641,13 +649,34 @@ func TestExamplePipelineWithFakeRuntime(t *testing.T) {
 func TestDockerRuntimeMockBinaryAndCLI(t *testing.T) {
 	tmpDir := t.TempDir()
 	fakeDocker := filepath.Join(tmpDir, "mock-docker")
-	script := `#!/bin/sh
+	if runtime.GOOS == "windows" {
+		fakeDocker += ".bat"
+		// On Windows, NewDockerRuntime passes:
+		// "run" "--rm" "-v" ... "-w" ... "-e" ... image "sh" "-c" command
+		// The command is the last argument %* or echo %~1. In batch:
+		// We execute the last argument in sh or cmd.
+		// For our test, run is "echo hello".
+		script := `@echo off
+setlocal enabledelayedexpansion
+for %%a in (%*) do set last=%%a
+:: strip quotes if present
+if defined last (
+    set "last=!last:"=!"
+    !last!
+)
+`
+		if err := os.WriteFile(fakeDocker, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		script := `#!/bin/sh
 # The last argument is the command passed to sh -c
 for last; do :; done
 sh -c "$last"
 `
-	if err := os.WriteFile(fakeDocker, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
+		if err := os.WriteFile(fakeDocker, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	srcDir := filepath.Join(tmpDir, "src")

@@ -81,4 +81,13 @@ func TestConformanceDockerExamplePipeline(t *testing.T) {
 	if !foundHit {
 		t.Fatalf("expected cache_hit on second conformance run, got events: %+v", events)
 	}
+
+	t.Cleanup(func() {
+		_ = filepath.WalkDir(workDir, func(p string, d os.DirEntry, err error) error {
+			if err == nil {
+				_ = os.Chmod(p, 0o777)
+			}
+			return nil
+		})
+	})
 }
