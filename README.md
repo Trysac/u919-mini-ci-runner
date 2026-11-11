@@ -1,55 +1,38 @@
 # mini-ci-runner
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/Trysac/u919-mini-ci-runner.svg)](https://pkg.go.dev/github.com/Trysac/u919-mini-ci-runner)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/Trysac/u919-mini-ci-runner/actions/workflows/ci.yml/badge.svg)](https://github.com/Trysac/u919-mini-ci-runner/actions/workflows/ci.yml)
+Run CI pipelines from a YAML file in containers with job dependencies, matrix expansion, content-keyed caches, artifacts and live logs. Developers often cannot run their CI pipeline locally before pushing, so a typo in a matrix or a cache key costs a round trip to hosted CI. Unlike full GitHub Actions emulators (act) or programmable SDKs (Dagger), `mini-ci-runner` provides a single small, documented pipeline format and an embeddable Go API with an in-memory `FakeRuntime` so pipelines themselves can be unit-tested without containers.
 
-Run CI pipelines from a YAML file in containers with job dependencies, matrix expansion, content-keyed caches, artifacts and live logs
+## Installation
 
-## Problem
-
-Describe in two or three sentences the concrete problem this utility solves, who hits it, and what
-they do today without it. Replace this paragraph when the first real feature lands.
-
-## Install
-
-```sh
+```bash
 go get github.com/Trysac/u919-mini-ci-runner
+go install github.com/Trysac/u919-mini-ci-runner/cmd/mini-ci-runner@latest
 ```
-
-Requires Go 1.23 or newer. No dependencies outside the standard library.
 
 ## Usage
 
+### Go API
+
 ```go
-package main
-
-import (
-	"errors"
-	"fmt"
-
-	"github.com/Trysac/u919-mini-ci-runner"
-)
-
-func main() {
-	// Normalize trims surrounding whitespace and lower-cases the text.
-	out, _ := minicirunner.Normalize("  Hello World ")
-	fmt.Println(out) // -> "hello world"
-
-	// Blank input is rejected explicitly instead of returning an empty string.
-	if _, err := minicirunner.Normalize("   "); errors.Is(err, minicirunner.ErrBlank) {
-		fmt.Println("rejected:", err)
-	}
-}
+p, err := minicirunner.Parse(yamlBytes)
+rep, err := minicirunner.Run(ctx, p, minicirunner.Options{
+	Runtime:      minicirunner.NewDockerRuntime("docker"),
+	SourceDir:    ".",
+	CacheDir:     ".ci/cache",
+	ArtifactsDir: ".ci/artifacts",
+})
+fmt.Println(rep.OK, err)
 ```
 
-## Documentation
+## API Summary
 
-- [Architecture](docs/ARCHITECTURE.md) and [decisions](docs/decisions/)
-- [Testing](docs/TESTING.md) and [security](docs/SECURITY.md)
-- [Project record](docs/PROJECT.md) and [stack](docs/STACK.md)
-- [Changelog](CHANGELOG.md) and [contributing guide](CONTRIBUTING.md)
+- `Parse(data []byte) (*Pipeline, error)`: Parses YAML input with validation against limits (1 MiB size, 32 depth) and schema enforcement.
+- `Run(ctx context.Context, p *Pipeline, opts Options) (*Report, error)`: Executes the pipeline via `Runtime` (Docker or Fake), managing concurrency and DAG scheduling.
+- `Options`: Configures runtime, directories (`SourceDir`, `CacheDir`, `ArtifactsDir`), concurrency (`MaxParallel`), logging (`Logs`), and event hooks (`OnEvent`).
+- Errors: Specific error codes include `parse`, `input_too_large`, `aliases_not_allowed`, `too_deep`, `invalid_path`, `cycle`, `unknown_job`, `matrix_too_large`, `invalid_timeout`, `runtime`.
 
-## License
+## Why not act or Dagger?
 
-[MIT](LICENSE) (c) 2026 Miguel Gomez
+Unlike full GitHub Actions emulators (`act`) or programmable SDKs (`Dagger`), `mini-ci-runner` provides a single small, documented pipeline format and an embeddable Go API with an in-memory `FakeRuntime` so pipelines themselves can be unit-tested without containers.
+
+See [docs/SECURITY.md](docs/SECURITY.md) for security details.

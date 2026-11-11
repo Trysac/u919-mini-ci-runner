@@ -1,23 +1,12 @@
-# Security notes
+# Security Policy & Threat Model
 
-## Threat model
+## Threat Model
 
-`github.com/Trysac/u919-mini-ci-runner` is a pure library without I/O. The main risks are:
+`mini-ci-runner` parses YAML pipeline configurations and executes container commands.
 
-- **Supply chain**: a compromised dependency or CI action. Mitigation: standard library only,
-  `go.sum` verification, `govulncheck` in the local gates, Dependabot weekly updates, actions
-  pinned by commit SHA, minimal workflow permissions.
-- **Leaked secrets**: tokens committed by mistake. Mitigation: `gitleaks` runs in the local gates
-  and in CI; `.env` files are git-ignored.
-- **Insecure code**: disabled TLS verification, weak crypto, command injection. Mitigation: a
-  `security` gate (gosec, high severity fails, `#nosec` ignored); fix the code instead of silencing
-  it.
-- **Untrusted input**: callers may pass hostile strings. Mitigation: validate input and return
-  explicit errors; never use `unsafe` or `os/exec` with untrusted data.
+### Controls
 
-## Publishing
-
-Releases are git tags served through the Go module proxy and checksum database. No registry token
-is stored in the repository.
-
-To report a vulnerability, see [SECURITY.md](../SECURITY.md).
+- **YAML Bomb & Resource Exhaustion Protection**: Input files over 1 MiB are rejected, YAML AST depth above 32 is rejected (`too_deep`), YAML aliases are rejected before decoding, matrix expansion is capped at 256 legs per job and 100 total jobs, workspace copies are capped at 512 MiB, and per-job logs are capped at `MaxLogBytes` (default 1 MiB).
+- **Path Traversal Prevention**: All `cache.paths`, `artifacts`, and `hashFiles` globs are validated as clean, relative POSIX paths without `..` segments; invalid paths return an error.
+- **No Host Shell Injection**: `NewDockerRuntime` passes arguments directly as an argv list to `exec.CommandContext` and never invokes a host shell.
+- **Secret Hygiene**: `OnEvent` notifications never carry environment variable values, and the library performs no global logging.
