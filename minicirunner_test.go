@@ -809,3 +809,43 @@ jobs:
 	// [build] built
 	// ok: true
 }
+
+// Containers must run as the invoking user so files they write into the bind-mounted workdir stay
+// removable by the host on the next run (root-owned files made the workdir cleanup fail).
+func TestDockerRuntimeRunsAsHostUser(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX user IDs do not apply on Windows; docker runs without --user there")
+	}
+	tmpDir := t.TempDir()
+	argsFile := filepath.Join(tmpDir, "args.txt")
+	fakeDocker := filepath.Join(tmpDir, "mock-docker")
+	script := "#!/bin/sh\nprintf '%s\n' \"$@\" > '" + argsFile + "'\n"
+	if err := os.WriteFile(fakeDocker, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := minicirunner.NewDockerRuntime(fakeDocker)
+	code, err := rt.Run(context.Background(), minicirunner.StepSpec{
+		Image:   "busybox",
+		Command: "true",
+		Workdir: tmpDir,
+	}, io.Discard)
+	if err != nil || code != 0 {
+		t.Fatalf("Run = (%d, %v), want (0, nil)", code, err)
+	}
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
+	found := false
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--user" && args[i+1] == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("docker args %q do not contain --user %s", args, want)
+	}
+}

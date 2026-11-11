@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -31,9 +32,11 @@ type dockerRuntime struct {
 //
 // It invokes:
 //
-//	exec.CommandContext(ctx, binary, "run", "--rm", "-v", workdir+":/workspace", "-w", "/workspace", "-e", "K=V"..., image, "sh", "-c", command)
+//	exec.CommandContext(ctx, binary, "run", "--rm", "--user", "UID:GID", "-v", workdir+":/workspace", "-w", "/workspace", "-e", "K=V"..., image, "sh", "-c", command)
 //
-// directly via an argv list without invoking a host shell.
+// directly via an argv list without invoking a host shell. On POSIX hosts "--user" is the invoking
+// user's IDs, so files a step writes into the workdir stay owned (and removable) by that user; on
+// Windows, where user IDs are unavailable, it is omitted.
 func NewDockerRuntime(binary string) Runtime {
 	if binary == "" {
 		binary = "docker"
@@ -49,9 +52,14 @@ func (d *dockerRuntime) Run(ctx context.Context, spec StepSpec, out io.Writer) (
 	args := []string{
 		"run",
 		"--rm",
-		"-v", absWorkdir + ":/workspace",
-		"-w", "/workspace",
 	}
+	if uid, gid := os.Getuid(), os.Getgid(); uid >= 0 && gid >= 0 {
+		args = append(args, "--user", fmt.Sprintf("%d:%d", uid, gid))
+	}
+	args = append(args,
+		"-v", absWorkdir+":/workspace",
+		"-w", "/workspace",
+	)
 	if len(spec.Env) > 0 {
 		keys := make([]string, 0, len(spec.Env))
 		for k := range spec.Env {
